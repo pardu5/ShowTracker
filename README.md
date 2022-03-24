@@ -1,6 +1,6 @@
 # Show Tracker
 
-# Project Description
+## Project Description
 Let users build up a list of shows they want to track. They can get updates on new episodes and house links to places to watch each show. All in all, to reduce the amount of wasted time going to tons of different websites to see if a new episode has come out yet.
 
 ## Table of Contents
