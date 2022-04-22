@@ -50,6 +50,7 @@ Having a Batch Job update the entire database on a scheduled basis would reduce 
 - [ ] Help button to explain how to use the app and how it works
 - [ ] Edit button for shows to change information
 - [ ] Pop up confirmation on deleting a show from list
+- [ ] Let user choose the language they want to use
 
 ## Non-software Ideas
 - [ ] "https://www.ko-fi.com" button to open up donations?
