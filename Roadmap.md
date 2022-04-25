@@ -49,7 +49,7 @@ Having a Batch Job update the entire database on a scheduled basis would reduce 
 - [ ] User login that returns a userid to hold in memory rather in file
 - [ ] Help button to explain how to use the app and how it works
 - [ ] Edit button for shows to change information
-- [ ] Pop up confirmation on deleting a show from list
+- [x] Pop up confirmation on deleting a show from list
 - [ ] Let user choose the language they want to use
 - [ ] Search for new shows in app and add from there
 
