@@ -46,12 +46,10 @@ Having a Batch Job update the entire database on a scheduled basis would reduce 
 - [x] Batch Job that directly connects to the database and checks for new shows created
 - [x] AWS EventBridge used to schedule the Batch Job to automatically happen after X time
 - [x] Checking for new episodes removed from app, now just pulls latest data from database
-- [ ] User login that returns a userid to hold in memory rather in file
 - [x] Help button to explain how to use the app
-- [ ] Edit button for shows to change information
 - [x] Pop up confirmation on deleting a show from list
+- [x] https://www.ko-fi.com page created for donations
+- [ ] User login that returns a userid to hold in memory rather in file
+- [ ] Edit button for shows to change information
 - [ ] Let user choose the language they want to use
 - [ ] Search for new shows in app and add from there
-
-## Non-software Ideas
-- [ ] "https://www.ko-fi.com" button to open up donations?
