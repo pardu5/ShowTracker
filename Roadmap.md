@@ -47,7 +47,7 @@ Having a Batch Job update the entire database on a scheduled basis would reduce 
 - [x] AWS EventBridge used to schedule the Batch Job to automatically happen after X time
 - [x] Checking for new episodes removed from app, now just pulls latest data from database
 - [ ] User login that returns a userid to hold in memory rather in file
-- [ ] Help button to explain how to use the app and how it works
+- [x] Help button to explain how to use the app
 - [ ] Edit button for shows to change information
 - [x] Pop up confirmation on deleting a show from list
 - [ ] Let user choose the language they want to use
