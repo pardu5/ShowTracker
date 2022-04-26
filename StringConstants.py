@@ -5,7 +5,7 @@ path = os.path.abspath(os.path.join(os.path.dirname(__file__), ""))
 CONFIG_PATH = path+"\config\config.json"
 CONFIG_PLACEHOLDER = "__placeholder__"
 APP_TITLE = "Show Tracker"
-APP_HELP_LINK = "https://github.com/caseyshaley/ShowTracker#how-to-use-the-project"
+APP_HELP_LINK = "https://github.com/caseyshaley/ShowTracker#how-to-use-this-project"
 DONATION_PAGE = "https://ko-fi.com/showtracker"
 
 ### Lambda ###
