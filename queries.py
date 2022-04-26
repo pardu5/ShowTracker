@@ -1,6 +1,21 @@
 database = "entertainmenttracker"
 
 ###################################################################################
+###  USER  ########################################################################
+###################################################################################
+
+insert_account_query = """
+CREATE USER %s@%s 
+IDENTIFIED BY %s
+"""
+
+grant_privileges_query = """
+GRANT DELETE, INSERT, SELECT, UPDATE
+ON *.*
+TO %s@%s
+"""
+
+###################################################################################
 ###  CREATE  ######################################################################
 ###################################################################################
 
@@ -109,13 +124,18 @@ VALUES ( %s, %s)
 update_newest_episode_query = """
 UPDATE newest_episodes
 SET episode = %s
-WHERE show_id = %s
+WHERE show_id = %s;
+"""
+update_userlist_not_watched_query = """
+UPDATE userList
+SET watched = False
+WHERE show_id = %s AND user_id = %s
 """
 
-update_newest_episode_query = """
+update_to_has_watched_query = """
 UPDATE userList
 SET watched = True
-WHERE show_id = %s
+WHERE show_id = %s AND user_id = %s
 """
 
 ###################################################################################

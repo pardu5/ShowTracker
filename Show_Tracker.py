@@ -2,43 +2,27 @@ import ctypes
 import tkinter as tk
 from tkinter import ttk
 from tkinter import *
-from mysql.connector import connect, Error
 import requests
 import webbrowser
 import os
 from threading import Thread
 import json
-from os.path import exists as file_exists
-import queries
-from dotenv import dotenv_values
-config = dotenv_values("./config/.env")
+import StringConstants
 
 ###################################################################################
 ###  VARIABLES  ###################################################################
 ###################################################################################
 
-path = os.path.abspath(os.path.join(
-        os.path.dirname(__file__), "")
-    )
-user = config["SHOW_TRACKER_USER"]
-password = config["SHOW_TRACKER_PASSWORD"]
-api_key = config["SHOW_TRACKER_API_KEY"]
-print(f"USER: {user}\nPASSWORD: {password}\nAPI_KEY: {api_key}")
-"""
-database = "show_tracker"
-host = "localhost"
-"""
-database = "entertainmenttracker"
-host = "entertainmenttracker.cgotjtwwrdst.us-east-1.rds.amazonaws.com"
-configPath = path+"\config\config.json"
+api_lambda = "https://2e8c9ao6xj.execute-api.us-east-1.amazonaws.com/show-tracker/"
 
 label_holder=[]
 
-configured = False
-connected = False
+has_account = False
 
 user_id = -1
 frame_row = 0
+
+error_stringvar = None
 
 ###################################################################################
 ###  SET UP  ######################################################################
@@ -64,96 +48,139 @@ def guiSetUp(self):
     self.columnconfigure(0, weight=1)
     self.columnconfigure(1, weight=1)
 
-# Adds a new user to the database if they don't have a 
-# configure file on app launch
+# Ask the user to sign in or sign up if the config file 
+# doesn't have a username and password already set
 def userSetUp():
     global user_id
-    with open(configPath, "r") as configFile:
+    global has_account
+    global error_stringvar
+    placeholder = StringConstants.CONFIG_PLACEHOLDER
+
+    with open(StringConstants.CONFIG_PATH, "r") as configFile:
         data = json.load(configFile)
-        user_id = data["user_id"]
-        if data["user_id"] > 0:
-            print(f"User ID: {user_id}")
+        username = data["username"]
+        password = data["password"]
+        if not username == placeholder and not password == placeholder:
+            params = {"username": username, "password": password}
+            response = requests.get(api_lambda+StringConstants.SELECT_USER, params=params)
+            user_id = response.json()
+            print(f"Username: {username}\nPassword: {password}")
+            has_account = True
             return
 
-    try:
-        with connect(
-            host=host,
-            user=user,
-            password=password,
-            database=database
-        ) as connection:
-            print(connection)
-            with connection.cursor() as cursor:
-                cursor.execute(queries.insert_user_query)
-                user_id = cursor.lastrowid
-                connection.commit()
-    except Error as e:
-        print(f"Error: {e}")
+    top = generatePopUpWindow()
 
-    user_info = {
-        "user_id" : user_id,
-    }
+    frame_pop_up_username = tk.Frame(master=top, borderwidth=5)
+    # Elements inside frame
+    label = tk.Label(frame_pop_up_username, text=StringConstants.LABEL_USERNAME)
+    label.pack(side=tk.LEFT)
+    entry_username = Entry(frame_pop_up_username, width = 25)
+    entry_username.pack(side=tk.LEFT, padx=10)
+    frame_pop_up_username.pack(pady=(5, 0))
+    entry_username.focus()
 
+    frame_pop_up_password = tk.Frame(master=top, borderwidth=5)
+    # Elements inside frame
+    label = tk.Label(frame_pop_up_password, text=StringConstants.LABEL_PASSWORD)
+    label.pack(side=tk.LEFT)
+    entry_password = Entry(frame_pop_up_password, width = 25)
+    entry_password.pack(side=tk.LEFT, padx=10)
+    frame_pop_up_password.pack(pady=(5, 0))
+
+    frame_pop_up_buttons = tk.Frame(master=top, borderwidth=5)
+    # Elements inside frame
+    error_stringvar = tk.StringVar(frame_pop_up_buttons, "")
+    lbl_error_text = tk.Label(textvariable=error_stringvar, master=frame_pop_up_buttons)
+    lbl_error_text.pack(side=tk.LEFT, anchor="w")
+    sign_in_button = Button(frame_pop_up_buttons, text=StringConstants.LABEL_SIGN_IN, 
+                    command=lambda:[signUpOrIn("IN", entry_username.get(), entry_password.get(), top)])
+    sign_in_button.pack(side=tk.RIGHT, padx=(0, 10))
+    sign_up_button = Button(frame_pop_up_buttons, text=StringConstants.LABEL_SIGN_UP, 
+                    command=lambda:[signUpOrIn("UP", entry_username.get(), entry_password.get(), top)])
+    sign_up_button.pack(side=tk.RIGHT, padx=(0, 10))
+    frame_pop_up_buttons.pack(side=tk.RIGHT, pady=(5, 0))
+
+    window.wait_window(top)
+
+def signUpOrIn(choice, username, password, top):
+    global user_id
+    global has_account
+
+    if username == "" or password == "":
+        return
+
+    response = ""
+    params = {"username": username, "password": password}
+    if choice == "IN":
+        response = requests.get(api_lambda+StringConstants.SELECT_USER, params=params)
+        text = "Login information is invalid"
+    elif choice == "UP":
+        response = requests.get(api_lambda+StringConstants.INSERT_USER, params=params)
+        text = "Username already exists.\nTry signing in instead?"
+    result = response.json()
+    if not result == -1:
+        user_id = response.json()
+        has_account = True
+    else:
+        error_stringvar.set(text)
+        return
+
+    user_info = {"username" : username, "password": password}
     configData = json.dumps(user_info, indent = 4)
-    with open(configPath, "w") as configFile:
+    with open(StringConstants.CONFIG_PATH, "w") as configFile:
         configFile.write(configData)
+    close_win(top)
 
 # Starts a thread to gather all the shows the user has in their list
 def startShows():
     shows = getShows()
-    INTERNET_IMG_PATH = path+"\images\internet-globe.png"
     for show in shows:
-        addButtonAndLabel(scrollable_frame, show, INTERNET_IMG_PATH, True)
+        addButtonAndLabel(scrollable_frame, show, StringConstants.INTERNET_IMG_PATH, True)
 
 # Look up shows based on user_id from database
 def getShows():
-    try:
-        with connect(
-            host=host,
-            user=user,
-            password=password,
-            database=database
-        ) as connection:
-            print(connection)
-            with connection.cursor() as cursor:
-                userid_tuple = (user_id,)
-                cursor.execute(queries.get_shows_titles_query, userid_tuple, multi=True)
-                ret = cursor.fetchall()
-                connection.commit()
-                return ret
-    except Error as e:
-        print(f"Error: {e}")
+    params = {"user_id": user_id}
+    response = requests.get(api_lambda+StringConstants.SELECT_TITLES, params=params)
+    return response.json()
 
 # Starts a thread to gather all newest episodes that haven't been watched
 # by user in their list
 def startEpisodes():
     newEpisodes = getNewestEpisodes()
-    EYE_IMG_PATH = path+"\images\eye_ball_circle.png"
     for episode in newEpisodes:
-        addButtonAndLabel(scrollable_frame_episodes_right, episode, EYE_IMG_PATH, False)
+        addButtonAndLabel(scrollable_frame_episodes_right, episode, StringConstants.EYE_IMG_PATH, False)
+
+def generatePopUpWindow():
+    top = Toplevel(window)
+    top.grab_set()
+    top.focus()
+    x = window.winfo_rootx()
+    y = window.winfo_rooty()
+    geometry = "+%d+%d" % (x+100, y)
+    top.geometry(geometry)
+    return top
 
 # Create a pop up and provide user with space to add info about show
 def addShow(event):
+    global has_account
+    if not has_account:
+        return
+
     # Create pop up window
-    top = Toplevel(window)
-    top.grab_set()
-    parent = event.widget.master
-    x = parent.winfo_rootx()
-    y = parent.winfo_rooty()
-    geometry = "+%d+%d" % (x+100, y)
-    top.geometry(geometry)
+    top = generatePopUpWindow()
 
     frame_pop_up_name = tk.Frame(master=top, borderwidth=5)
     # Elements inside frame
-    label = tk.Label(frame_pop_up_name, text="Show Name:")
+    label = tk.Label(frame_pop_up_name, text=StringConstants.LABEL_SHOW_NAME)
     label.pack(side=tk.LEFT)
     entry = Entry(frame_pop_up_name, width = 25)
     entry.pack(side=tk.LEFT, padx=10)
     frame_pop_up_name.pack(pady=(5, 0))
+    entry.focus()
 
     frame_pop_up_id = tk.Frame(master=top, borderwidth=5)
     # Elements inside frame
-    label = tk.Label(frame_pop_up_id, text="Show ID:")
+    label = tk.Label(frame_pop_up_id, text=StringConstants.LABEL_SHOW_ID)
     label.pack(side=tk.LEFT)
     entry = Entry(frame_pop_up_id, width = 25)
     entry.pack(side=tk.LEFT, padx=10)
@@ -161,49 +188,48 @@ def addShow(event):
 
     frame_pop_up_url = tk.Frame(master=top, borderwidth=5)
     # Elements inside frame
-    label = tk.Label(frame_pop_up_url, text="Show URL:")
+    label = tk.Label(frame_pop_up_url, text=StringConstants.LABEL_SHOW_URL)
     label.pack(side=tk.LEFT)
     entry = Entry(frame_pop_up_url, width = 25)
     entry.pack(side=tk.LEFT, padx=10)
     frame_pop_up_url.pack()
 
-    ok_button = Button(top, text="OK", command=lambda:close_win(top))
+    ok_button = Button(top, text=StringConstants.LABEL_OK, command=lambda:closeAddShow(top))
     ok_button.pack(side=tk.RIGHT, padx=(0, 10), pady=(0, 10))
 
-# Close pop up and add show based on the info provided by user
-def close_win(top):
+def closeAddShow(top):
     children = top.winfo_children()
     name = children[0].winfo_children()[1].get()
     link = children[1].winfo_children()[1].get()
     url = children[2].winfo_children()[1].get()
-    shows_record = (name, link, url)
 
-    try:
-        with connect(
-            host=host,
-            user=user,
-            password=password,
-            database=database
-        ) as connection:
-            print(connection)
-            with connection.cursor() as cursor:
-                cursor.execute(queries.insert_shows_query, shows_record, multi=True)
-                show_id = cursor.lastrowid
-                cursor.fetchall()
+    if name == "" or link == "":
+        return
+    close_win(top)
 
-                userList_tuple = (user_id, show_id, 0)
-                cursor.execute(queries.insert_userList_query, userList_tuple, multi=True)
-                connection.commit()
+    params = {"name": name, "link": link, "url": url}
+    response = requests.get(api_lambda+StringConstants.INSERT_SHOW, params=params)
+    show_id = response.json()
 
-                INTERNET_IMG_PATH = path+"\images\internet-globe.png"
-                data = (cursor.lastrowid, name, url)
-                addButtonAndLabel(scrollable_frame, data, INTERNET_IMG_PATH, True)
-    except Error as e:
-        print(f"Error: {e}")
+    if show_id == 0:
+        params = {"show_title": name}
+        response = requests.get(api_lambda+StringConstants.SELECT_SHOW, params=params)
+        show_id = response.json()[0][0]
+        print(f"Show ID: {show_id}")
 
+    params = {"user_id": user_id, "show_id": show_id}
+    response = requests.get(api_lambda+StringConstants.INSERT_LIST, params=params)
+
+    data = (show_id, name, url)
+    addButtonAndLabel(scrollable_frame, data, StringConstants.INTERNET_IMG_PATH, True)
+
+    t = Thread(target=readdNewElements, args=(scrollable_frame, True))
+    t.start()
+
+# Close pop up and add show based on the info provided by user
+def close_win(top):
     top.grab_release()
     top.destroy()
-    readdNewElements(scrollable_frame, True)
     window.update()
 
 # Starts a thread to check all shows and re-add them to the GUI
@@ -211,74 +237,13 @@ def startCheckingShows():
     t = Thread(target=checkShows)
     t.start()
 
-    t = Thread(target=readdNewElements, args=(scrollable_frame_episodes_right, False))
-    t.start()
-
 # Grab latest user list of shows and check for new episodes for each
 def checkShows():
-    v.set("Checking...")
+    window_update_stringvar.set(StringConstants.LABEL_CHECKING)
     window.update()
-    try:
-        with connect(
-            host=host,
-            user=user,
-            password=password,
-            database=database
-        ) as connection:
-            print(connection)
-            with connection.cursor() as cursor:
-                show_tuple = (user_id,)
-                cursor.execute(queries.get_shows_query, show_tuple, multi=True)
-                showsList = cursor.fetchall()
-                connection.commit()
 
-            for show in showsList:
-                resultEpisode = get_latest_episode_of(show[1], show[2])
-
-                # Grab episode in the database
-                with connection.cursor() as cursor:
-                    show_tuple = (show[0],)
-                    cursor.execute(queries.get_current_newest_episode_query, show_tuple, multi=True)
-                    currentEpisode = cursor.fetchall()
-                    connection.commit()
-
-                # Handle result episode vs current episode
-                changed = True
-                episode_tuple = (resultEpisode, show[0])
-                if len(currentEpisode) == 0:
-                    with connection.cursor() as cursor:
-                        cursor.execute(queries.insert_newest_episode_query, episode_tuple, multi=True)
-                        connection.commit()
-                elif currentEpisode[0][0] != resultEpisode:
-                    with connection.cursor() as cursor:
-                        episode_tuple = (resultEpisode, show[0])
-                        cursor.execute(queries.update_newest_episode_query, episode_tuple, multi=True)
-                        connection.commit()
-                else:
-                    changed = False
-
-                # Newest episode was changed/added for the first time
-                if cursor.rowcount != 0 and changed:
-                    newEpisode_tuple = (resultEpisode, show[0])
-                    CROSS_IMG_PATH = path+"\images\eye_ball_circle.png"
-                    addButtonAndLabel(scrollable_frame_episodes_right, newEpisode_tuple, CROSS_IMG_PATH, False)
-            v.set("Updated!")
-    except Error as e:
-        print(f"Error: {e}")
-
-# Send requests to API to gather most recent episode info of show
-def get_latest_episode_of(show_name, show_url_string) -> str:
-    url = (
-        f"https://api.themoviedb.org/3/tv/{show_url_string}?api_key={api_key}"
-    )
-
-    response = requests.get(url)
-    episodeJSON = response.json()
-    name = episodeJSON["name"]
-    latest_episode = episodeJSON["last_episode_to_air"]
-    season_number = latest_episode["season_number"]
-    episode_number = latest_episode["episode_number"]
-    return f"{name}: Season {season_number} Episode {episode_number}"
+    t = Thread(target=readdNewElements, args=(scrollable_frame_episodes_right, False))
+    t.start()
 
 # Destroy children of parent widget then get the newest data for the respective 
 # parent widget
@@ -292,52 +257,56 @@ def readdNewElements(parent, isLeft):
         textList.append(text)
         child.destroy()
     
+    IMG_PATH = ""
     if isLeft:
         data = getShows()
-        imagePath = "\images\internet-globe.png"
+        IMG_PATH = StringConstants.INTERNET_IMG_PATH
     else:
         data = getNewestEpisodes()
-        imagePath = "\images\eye_ball_circle.png"
-
-    EYE_IMG_PATH = path+f"{imagePath}"
+        IMG_PATH = StringConstants.EYE_IMG_PATH
 
     for element in data:
-        addButtonAndLabel(parent, element, EYE_IMG_PATH, isLeft)
+        addButtonAndLabel(parent, element, IMG_PATH, isLeft)
+    window_update_stringvar.set(StringConstants.LABEL_UPDATED)
 
 # Get list of newest episodes in database
 def getNewestEpisodes():
-    try:
-        with connect(
-            host=host,
-            user=user,
-            password=password,
-            database=database
-        ) as connection:
-            print(connection)
-            with connection.cursor() as cursor:
-                userid_tuple = (user_id,)
-                cursor.execute(queries.get_newest_episodes_query, userid_tuple, multi=True)
-                episodes = cursor.fetchall()
-                connection.commit()
-                return episodes
-    except Error as e:
-        print(f"Error: {e}")
+    pathString = "select/episodes"
+    params = {"user_id": user_id}
+    response = requests.get(api_lambda+StringConstants.SELECT_EPISODES, params=params)
+    return response.json()
+
+# Add image button with or without text on a parent frame
+def addImageButton(parent, image, text, level, sample):
+    img = PhotoImage(file = image)
+    subImg = img.subsample(int(sample/ratioWidth), int(sample/ratioHeight))
+    if level == "Top":
+        button_temp = tk.Button(parent, text=text, image=subImg,compound="right", 
+                                borderwidth=5, padx=10, cursor="hand2")
+        button_temp.pack(side=tk.RIGHT, padx=5)
+    elif level == "Middle":
+        button_temp = tk.Button(parent, image=subImg, width=f"{width*0.0175}",
+                                height=f"{width*0.0175}", borderwidth=0, cursor="hand2")
+        button_temp.pack(side=tk.LEFT, anchor="nw")
+    elif level == "Bottom":
+        button_temp = tk.Button(parent, text=text, image=subImg, 
+                                borderwidth=5, compound="right", padx=10,
+                                command=lambda: [startCheckingShows()], cursor="hand2")
+        button_temp.pack(side=tk.RIGHT, padx=5)
+    label_holder.append(subImg)
+    return button_temp
 
 # Add label with corresponding buttons that go with it
+#
+# For shows:    data = [show_id, show_title, show_url]
+# For episodes: data = [episode_text, show_id]
 def addButtonAndLabel(parent, data, image, isLeft):
-    textLength = 0
     text = ""
     frame_temp = tk.Frame(master=parent, pady=5)
 
-    img = PhotoImage(file = image)
-    subImg = img.subsample(int(20/ratioWidth), int(20/ratioHeight))
-    label_holder.append(subImg)
-    button_temp = tk.Button(frame_temp, image=subImg, width=f"{width*0.0175}",
-                            height=f"{width*0.0175}", borderwidth=0)
-    button_temp.pack(side=tk.LEFT, anchor="nw")
+    button_temp = addImageButton(frame_temp, image, "", "Middle", 20)
 
     if isLeft:
-        textLength = parent.master.winfo_width()*0.9
         text = data[1]
         if data[2] != "":
             args={"url": data[2]}
@@ -348,18 +317,11 @@ def addButtonAndLabel(parent, data, image, isLeft):
         else:
             button_temp.destroy()
 
-        CROSS_IMG_PATH = path+"\images\cross_red_circle.png"
-        img = PhotoImage(file = CROSS_IMG_PATH)
-        subImg = img.subsample(int(20/ratioWidth), int(20/ratioHeight))
-        label_holder.append(subImg)
-
-        button_delete = tk.Button(frame_temp, image=subImg, width=f"{width*0.0175}", 
-                                    height=f"{width*0.0175}", borderwidth=0)
-        button_delete.pack(side=tk.LEFT, anchor="nw")
+        button_delete = addImageButton(frame_temp, StringConstants.CROSS_IMG_PATH, "", "Middle", 20)
         args={"id": data[0]}
         button_delete.bind(
             "<Button-1>",
-            lambda event, arg=args: removeShow(event, arg)
+            lambda event, arg=args: confirmShowDelete(event, arg)
         )
     elif not isLeft:
         text = data[0]
@@ -417,76 +379,38 @@ def openURL(event, arg):
 def removeShow(event, arg):
     show_id = arg["id"]
 
-    try:
-        with connect(
-            host=host,
-            user=user,
-            password=password,
-            database=database
-        ) as connection:
-            print(connection)
-            with connection.cursor() as cursor:
-                show=(show_id,)
-                cursor.execute(queries.delete_userlist_query, show)
-                cursor.execute(queries.delete_show_query, show)
-                connection.commit()
-                if cursor.rowcount > 0:
-                    event.widget.master.destroy()
-                    readdNewElements(scrollable_frame_episodes_right, False)
-    except Error as e:
-        print(f"Error: {e}")
+    params = {"show_id": show_id}
+    response = requests.get(api_lambda+StringConstants.DELETE_LIST, params=params)
+
+    """params = {"show_id": show_id}
+    response = requests.get(api_lambda+StringConstants.DELETE_SHOW, params=params)"""
+
+    event.widget.master.destroy()
+    readdNewElements(scrollable_frame_episodes_right, False)
+
+def confirmShowDelete(event, arg):
+    top = generatePopUpWindow()
+
+    frame_pop_up_confirm = tk.Frame(master=top, borderwidth=5)
+    # Elements inside frame
+    label = tk.Label(frame_pop_up_confirm, text=StringConstants.LABEL_DELETE_CONFIRMATION)
+    label.pack(side=tk.LEFT)
+    frame_pop_up_confirm.pack(padx=(10, 10))
+
+    frame_pop_up_buttons = tk.Frame(master=top, borderwidth=5)
+    # Elements inside frame
+    yes_button = Button(frame_pop_up_buttons, text=StringConstants.LABEL_YES, command=lambda:[removeShow(event, arg), close_win(top)])
+    yes_button.pack(side=tk.RIGHT, padx=(0, 10))
+    cancel_button = Button(frame_pop_up_buttons, text=StringConstants.LABEL_CANCEL, command=lambda:close_win(top))
+    cancel_button.pack(side=tk.RIGHT, padx=(0, 10))
+    frame_pop_up_buttons.pack(side=tk.RIGHT, pady=(5, 0))
 
 # Set newest episode to watched so it doesn't show up in list anymore
 def setEpisodeToWatched(event, arg):
-    try:
-        with connect(
-            host=host,
-            user=user,
-            password=password,
-            database=database
-        ) as connection:
-            print(connection)
-            with connection.cursor() as cursor:
-                episode = (arg["show_id"],)
-                cursor.execute(queries.update_newest_episode_query, episode, multi=True)
-                if cursor.rowcount > 0:
-                    event.widget.master.destroy()
-                connection.commit()
-    except Error as e:
-        print(f"Error: {e}")
+    params = {"show_id": arg["show_id"], "user_id": user_id}
+    response = requests.get(api_lambda+StringConstants.UPDATE_WATCHED, params=params)
 
-###################################################################################
-###  DATABASE SET UP  #############################################################
-###################################################################################
-
-def databaseSetUp():
-    try:
-        with connect(
-            host=host,
-            user=user,
-            password=password,
-        ) as connection:
-            print(connection)
-            with connection.cursor() as cursor:
-                print("Checking on database and tables...")
-                db = (database,)
-                cursor.execute(queries.create_db_query)
-                cursor.execute(queries.use_db_query)
-                connection.commit()
-
-                cursor.execute(queries.create_shows_table_query)
-                print("Shows tables created successfully")
-                cursor.execute(queries.create_newest_episodes_table_query)
-                print("Episodes tables created successfully")
-                cursor.execute(queries.create_users_table_query)
-                print("Users tables created successfully")
-                cursor.execute(queries.create_userList_table_query)
-                print("User list tables created successfully")
-                connection.commit()
-            return True
-    except Error as e:
-        print(f"Set Up Error: \n\t{e}")
-        return False
+    event.widget.master.destroy()
 
 ###################################################################################
 ###  GUI  #########################################################################
@@ -500,13 +424,11 @@ ratioHeight = screensize[1] / 2160
 
 window = tk.Tk()
 window.geometry(f"{width}x{height}")
-window.title("Show Tracker")
+window.title(StringConstants.APP_TITLE)
 window.minsize(int(screensize[0]/2), 450)
 guiSetUp(window)
-connected = databaseSetUp()
-
-if connected:
-    userSetUp()
+window.update()
+userSetUp()
 
 window.rowconfigure(0, minsize=75)
 window.rowconfigure(1, minsize=300)
@@ -519,21 +441,32 @@ frame_episodes_right = tk.Frame(master=window, relief=tk.RIDGE, borderwidth=5)
 frame_bar_bottom = tk.Frame(master=window, relief=tk.RIDGE, borderwidth=5)
 
 ### Frame Features Top elements ###
-# Add Show button's image
-PLUS_IMG_PATH = path+"\images\\blue_plus_circle.png"
-image = PhotoImage(file = PLUS_IMG_PATH)
-subImg = image.subsample(int(10/ratioWidth), int(10/ratioHeight))
-label_holder.append(subImg)
-# Add Show button
-button_features_top = tk.Button(frame_features_top, image=subImg, width=f"{width*0.015}", 
-                                height=f"{width*0.015}", borderwidth=0)
-button_features_top.pack(side=tk.RIGHT)
-button_features_top.bind(
+# Add user_id label
+uid_stringvar = tk.StringVar(frame_features_top, StringConstants.LABEL_UID+f"{user_id}")
+label_userid = ttk.Label(frame_features_top, textvariable=uid_stringvar, justify="left")
+label_userid.pack(side=tk.LEFT, padx=[5,0])
+# Add Show button w/ image
+button_add_show_top = addImageButton(frame_features_top, StringConstants.PLUS_IMG_PATH, 
+                        StringConstants.LABEL_ADD_SHOW, "Top", 10)
+button_add_show_top.bind(
     "<Button-1>",
     addShow
 )
-lbl_list = tk.Label(text="Add show", master=frame_features_top)
-lbl_list.pack(side=tk.RIGHT)
+# Add Ko-fi donation button
+button_donation_top = addImageButton(frame_features_top, StringConstants.DONATION_IMG_PATH, "", "Top", 3)
+args={"url": StringConstants.DONATION_PAGE}
+button_donation_top.bind(
+    "<Button-1>",
+    lambda event, arg=args: openURL(event, arg)
+)
+# Add Help button w/ image
+button_help_top = addImageButton(frame_features_top, StringConstants.HELP_IMG_PATH, 
+                    StringConstants.LABEL_HELP, "Top", 25)
+args={"url": StringConstants.APP_HELP_LINK}
+button_help_top.bind(
+    "<Button-1>",
+    lambda event, arg=args: openURL(event, arg)
+)
 frame_features_top.grid(sticky="nsew", row=frame_row, column=0, columnspan=2)
 frame_row = frame_row + 1
 
@@ -549,9 +482,9 @@ scrollable_frame.bind(
 )
 canvas_shows_left.create_window((0, 0), window=scrollable_frame, anchor="nw")
 canvas_shows_left.configure(yscrollcommand=scrollbar.set)
-ttk.Label(scrollable_frame, text="List of shows:", anchor="nw", font='Helvetica 10 bold').pack(anchor="nw")
+ttk.Label(scrollable_frame, text=StringConstants.LABEL_SHOW_LIST, anchor="nw", font='Helvetica 10 bold').pack(anchor="nw")
 
-if connected:
+if has_account:
     t = Thread(target=startShows)
     t.start()
 
@@ -571,9 +504,9 @@ scrollable_frame_episodes_right.bind(
 )
 canvas_episodes_right.create_window((0, 0), window=scrollable_frame_episodes_right, anchor="nw")
 canvas_episodes_right.configure(yscrollcommand=scrollbar_episodes_right.set)
-ttk.Label(scrollable_frame_episodes_right, text="List of new episodes:", anchor="nw", font='Helvetica 10 bold').pack(anchor="w")
+ttk.Label(scrollable_frame_episodes_right, text=StringConstants.LABEL_EPISODES_LIST, anchor="nw", font='Helvetica 10 bold').pack(anchor="w")
 
-if connected:
+if has_account:
     t = Thread(target=startEpisodes)
     t.start()
 
@@ -583,18 +516,11 @@ frame_episodes_right.grid(sticky="nsew", row=frame_row, column=1)
 frame_row = frame_row + 1
 
 ### Frame Bar Bottom elements ###
-PLAY_IMG_PATH = path+"\images\green_play_button.png"
-image = PhotoImage(file = PLAY_IMG_PATH)
-subImg = image.subsample(int(18/ratioWidth), int(18/ratioHeight))
-label_holder.append(subImg)
-button_bar_bottom = tk.Button(frame_bar_bottom, image=subImg, width=f"{width*0.015}", 
-                                height=f"{width*0.015}", borderwidth=0, compound=RIGHT,
-    command=lambda: [startCheckingShows()])
-button_bar_bottom.pack(side=tk.RIGHT)
-lbl_list = tk.Label(text="Scan", master=frame_bar_bottom)
-lbl_list.pack(side=tk.RIGHT)
-v = tk.StringVar(frame_bar_bottom, "")
-lbl_update_text = tk.Label(textvariable=v, master=frame_bar_bottom)
+# Scan show's image
+button_bar_bottom = addImageButton(frame_bar_bottom, StringConstants.PLAY_IMG_PATH, 
+                        StringConstants.LABEL_SCAN, "Bottom", 18)
+window_update_stringvar = tk.StringVar(frame_bar_bottom, "")
+lbl_update_text = tk.Label(textvariable=window_update_stringvar, master=frame_bar_bottom)
 lbl_update_text.pack(side=tk.LEFT, anchor="w")
 frame_bar_bottom.grid(sticky="nsew", row=frame_row, column=0, columnspan=2)
 
