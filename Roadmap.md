@@ -49,7 +49,7 @@ Having a Batch Job update the entire database on a scheduled basis would reduce 
 - [x] Help button to explain how to use the app
 - [x] Pop up confirmation on deleting a show from list
 - [x] https://www.ko-fi.com page created for donations
-- [ ] User login that returns a userid to hold in memory rather in file
+- [x] User login that returns a userid to hold in memory rather in file
 - [ ] Edit button for shows to change information
 - [ ] Let user choose the language they want to use
 - [ ] Search for new shows in app and add from there
