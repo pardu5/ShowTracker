@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 
-block_cipher = None
+block_cipher = pyi_crypto.PyiBlockCipher(key='DGyp4Jb5Na6aWNHc9p6u78J9Utrptp95')
 
 
 a = Analysis(['Show_Tracker.py'],
