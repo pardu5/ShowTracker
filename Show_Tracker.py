@@ -135,7 +135,7 @@ def signUpOrIn(choice, username, password, top):
 def startShows():
     shows = getShows()
     for show in shows:
-        addButtonAndLabel(scrollable_frame, show, StringConstants.INTERNET_IMG_PATH, True)
+        addButtonAndLabel(scrollable_frame_shows_left, show, StringConstants.INTERNET_IMG_PATH, True)
 
 # Look up shows based on user_id from database
 def getShows():
@@ -161,7 +161,7 @@ def generatePopUpWindow():
     return top
 
 # Create a pop up and provide user with space to add info about show
-def addShow(event):
+def addShowWindow(event):
     global has_account
     if not has_account:
         return
@@ -194,10 +194,10 @@ def addShow(event):
     entry.pack(side=tk.LEFT, padx=10)
     frame_pop_up_url.pack()
 
-    ok_button = Button(top, text=StringConstants.LABEL_OK, command=lambda:closeAddShow(top))
+    ok_button = Button(top, text=StringConstants.LABEL_OK, command=lambda:closeAddShowWindow(top))
     ok_button.pack(side=tk.RIGHT, padx=(0, 10), pady=(0, 10))
 
-def closeAddShow(top):
+def closeAddShowWindow(top):
     children = top.winfo_children()
     name = children[0].winfo_children()[1].get()
     link = children[1].winfo_children()[1].get()
@@ -207,24 +207,58 @@ def closeAddShow(top):
         return
     close_win(top)
 
+    # insert show
     params = {"name": name, "link": link, "url": url}
     response = requests.get(api_lambda+StringConstants.INSERT_SHOW, params=params)
     show_id = response.json()
 
+    # check if inserted show already existed in database
     if show_id == 0:
         params = {"show_title": name}
         response = requests.get(api_lambda+StringConstants.SELECT_SHOW, params=params)
         show_id = response.json()[0][0]
         print(f"Show ID: {show_id}")
 
+    # insert show_id into userlist
     params = {"user_id": user_id, "show_id": show_id}
     response = requests.get(api_lambda+StringConstants.INSERT_LIST, params=params)
 
+    # add new show object into the right spot
     data = (show_id, name, url)
-    addButtonAndLabel(scrollable_frame, data, StringConstants.INTERNET_IMG_PATH, True)
-
-    t = Thread(target=readdNewElements, args=(scrollable_frame, True))
+    t = Thread(target=addShow, args=(scrollable_frame_shows_left, data))
     t.start()
+
+def addShow(parent, data):
+    show_id = data[0]
+    show_name = data[1]
+    show_url = data[2]
+
+    image = StringConstants.CROSS_IMG_PATH
+    img = PhotoImage(file = image)
+    deleteImg = img.subsample(int(20/ratioWidth), int(20/ratioHeight))
+    label_holder.append(deleteImg)
+
+    image = StringConstants.INTERNET_IMG_PATH
+    img = PhotoImage(file = image)
+    internetImg = img.subsample(int(20/ratioWidth), int(20/ratioHeight))
+    label_holder.append(internetImg)
+
+    for child in parent.winfo_children():
+        showLabel = child.winfo_children()[2]
+        if showLabel["text"] > show_name:
+            frame_temp = tk.Frame(master=parent, pady=5)
+
+            button_temp = tk.Button(frame_temp, image=internetImg, width=f"{width*0.0175}",
+                                height=f"{width*0.0175}", borderwidth=0, cursor="hand2",
+                                command= lambda: openURL(show_url))
+            button_temp.pack(side=tk.LEFT, anchor="nw")
+            button_temp = tk.Button(frame_temp, image=deleteImg, width=f"{width*0.0175}",
+                                height=f"{width*0.0175}", borderwidth=0, cursor="hand2")
+            button_temp.pack(side=tk.LEFT, anchor="nw")
+            label_temp = ttk.Label(frame_temp, text=show_name, justify="left")
+            label_temp.pack(fill=tk.X, expand=True)
+            frame_temp.pack(fill=tk.X, expand=True, before=child)
+            return
 
 # Close pop up and add show based on the info provided by user
 def close_win(top):
@@ -271,7 +305,6 @@ def readdNewElements(parent, isLeft):
 
 # Get list of newest episodes in database
 def getNewestEpisodes():
-    pathString = "select/episodes"
     params = {"user_id": user_id}
     response = requests.get(api_lambda+StringConstants.SELECT_EPISODES, params=params)
     return response.json()
@@ -310,10 +343,7 @@ def addButtonAndLabel(parent, data, image, isLeft):
         text = data[1]
         if data[2] != "":
             args={"url": data[2]}
-            button_temp.bind(
-                "<Button-1>",
-                lambda event, arg=args: openURL(event, arg)
-            )
+            button_temp["command"] = lambda: openURL(data[2])
         else:
             button_temp.destroy()
 
@@ -370,8 +400,7 @@ def wrapLengthChange(event, data):
                 label.config(wraplength=wrapSize)
 
 # URL button event to open URL given by the user
-def openURL(event, arg):
-    url = arg["url"]
+def openURL(url):
     if url != "":
         webbrowser.open(url, new=2)
 
@@ -382,11 +411,7 @@ def removeShow(event, arg):
     params = {"show_id": show_id}
     response = requests.get(api_lambda+StringConstants.DELETE_LIST, params=params)
 
-    """params = {"show_id": show_id}
-    response = requests.get(api_lambda+StringConstants.DELETE_SHOW, params=params)"""
-
     event.widget.master.destroy()
-    readdNewElements(scrollable_frame_episodes_right, False)
 
 def confirmShowDelete(event, arg):
     top = generatePopUpWindow()
@@ -450,39 +475,33 @@ button_add_show_top = addImageButton(frame_features_top, StringConstants.PLUS_IM
                         StringConstants.LABEL_ADD_SHOW, "Top", 10)
 button_add_show_top.bind(
     "<Button-1>",
-    addShow
+    addShowWindow
 )
 # Add Ko-fi donation button
 button_donation_top = addImageButton(frame_features_top, StringConstants.DONATION_IMG_PATH, "", "Top", 3)
-args={"url": StringConstants.DONATION_PAGE}
-button_donation_top.bind(
-    "<Button-1>",
-    lambda event, arg=args: openURL(event, arg)
-)
+url = StringConstants.DONATION_PAGE
+button_donation_top["command"] = lambda: openURL(url)
 # Add Help button w/ image
 button_help_top = addImageButton(frame_features_top, StringConstants.HELP_IMG_PATH, 
                     StringConstants.LABEL_HELP, "Top", 25)
-args={"url": StringConstants.APP_HELP_LINK}
-button_help_top.bind(
-    "<Button-1>",
-    lambda event, arg=args: openURL(event, arg)
-)
+url = StringConstants.APP_HELP_LINK
+button_help_top["command"] = lambda: openURL(url)
 frame_features_top.grid(sticky="nsew", row=frame_row, column=0, columnspan=2)
 frame_row = frame_row + 1
 
 ### Frame Shows Left elements ###
 canvas_shows_left = tk.Canvas(frame_shows_left)
 scrollbar = ttk.Scrollbar(frame_shows_left, orient="vertical", command=canvas_shows_left.yview)
-scrollable_frame = ttk.Frame(canvas_shows_left)
-scrollable_frame.bind(
+scrollable_frame_shows_left = ttk.Frame(canvas_shows_left)
+scrollable_frame_shows_left.bind(
     "<Configure>",
     lambda e: canvas_shows_left.configure(
         scrollregion=canvas_shows_left.bbox("all")
     )
 )
-canvas_shows_left.create_window((0, 0), window=scrollable_frame, anchor="nw")
+canvas_shows_left.create_window((0, 0), window=scrollable_frame_shows_left, anchor="nw")
 canvas_shows_left.configure(yscrollcommand=scrollbar.set)
-ttk.Label(scrollable_frame, text=StringConstants.LABEL_SHOW_LIST, anchor="nw", font='Helvetica 10 bold').pack(anchor="nw")
+ttk.Label(frame_shows_left, text=StringConstants.LABEL_SHOW_LIST, anchor="nw", font='Helvetica 10 bold').pack(anchor="nw")
 
 if has_account:
     t = Thread(target=startShows)
@@ -524,7 +543,7 @@ lbl_update_text = tk.Label(textvariable=window_update_stringvar, master=frame_ba
 lbl_update_text.pack(side=tk.LEFT, anchor="w")
 frame_bar_bottom.grid(sticky="nsew", row=frame_row, column=0, columnspan=2)
 
-args={"parent1": scrollable_frame, "parent2": scrollable_frame_episodes_right}
+args={"parent1": scrollable_frame_shows_left, "parent2": scrollable_frame_episodes_right}
 window.bind(
     '<Configure>', 
     lambda event, arg=args: wrapLengthChange(event, arg)
